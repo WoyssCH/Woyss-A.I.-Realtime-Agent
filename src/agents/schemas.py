@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, validator
-
 
 Speaker = Literal["patient", "assistant", "staff"]
 
@@ -33,7 +32,7 @@ class UtteranceInput(BaseModel):
 class StructuredFactPayload(BaseModel):
     """Structured fact ready for persistence."""
 
-    source_utterance_id: Optional[int] = None
+    source_utterance_id: int | None = None
     category: str
     field_name: str
     value: str

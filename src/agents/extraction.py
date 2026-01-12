@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Iterable, List
+from collections.abc import Iterable
 
+from agents.schemas import StructuredFactPayload, UtteranceInput
 from config.settings import get_settings
 from llm.base import BaseLLMClient
-from agents.schemas import StructuredFactPayload, UtteranceInput
 
 LOGGER = logging.getLogger(__name__)
 

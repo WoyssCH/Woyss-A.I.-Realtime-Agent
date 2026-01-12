@@ -1,20 +1,6 @@
 [tool.ruff]
 target-version = "py310"
-line-length = 100
-
-# Keep linting focused but useful; expand as the codebase hardens.
-select = [
-  "E",   # pycodestyle errors
-  "F",   # pyflakes
-  "I",   # isort (import ordering)
-  "UP",  # pyupgrade
-  "B",   # flake8-bugbear
-  "SIM", # flake8-simplify
-]
-
-ignore = [
-  # If you use long FastAPI route declarations/docstrings, raise line-length instead of ignoring E501.
-]
+line-length = 120
 
 exclude = [
   ".git",
@@ -26,10 +12,21 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-# Keep default for now; configuration lives here for clarity with newer Ruff versions.
+# Keep linting focused but useful; expand as the codebase hardens.
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "I",   # isort (import ordering)
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear
+  "SIM", # flake8-simplify
+]
+
+ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
+"src/api/routes.py" = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

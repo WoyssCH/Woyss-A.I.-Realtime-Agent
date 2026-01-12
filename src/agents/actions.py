@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Iterable, List
+from collections.abc import Iterable
 
 from agents.schemas import ActionDirective, UtteranceInput
 from llm.base import BaseLLMClient
@@ -62,7 +62,7 @@ class ActionPlanner:
         return directives
 
     def _render_transcript(self, utterances: Iterable[UtteranceInput]) -> str:
-        lines: List[str] = []
+        lines: list[str] = []
         for utt in utterances:
             lines.append(f"{utt.speaker}: {utt.text}")
         return "\n".join(lines)

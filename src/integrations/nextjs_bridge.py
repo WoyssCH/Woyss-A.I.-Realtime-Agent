@@ -7,8 +7,8 @@ from typing import Any
 
 import httpx
 
-from config.settings import get_settings
 from agents.schemas import ActionDirective
+from config.settings import get_settings
 
 LOGGER = logging.getLogger(__name__)
 

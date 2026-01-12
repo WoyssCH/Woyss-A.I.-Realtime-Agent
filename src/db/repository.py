@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Sequence
+from collections.abc import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.exc import NoResultFound

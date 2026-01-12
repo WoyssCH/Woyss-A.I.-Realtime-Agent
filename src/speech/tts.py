@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
@@ -19,7 +18,7 @@ class BaseSynthesizer(ABC):
 
     @abstractmethod
     async def synthesize(
-        self, text: str, language: str, voice: Optional[str] = None
+        self, text: str, language: str, voice: str | None = None
     ) -> bytes:
         """Synthesize speech for the given text and language."""
 
@@ -53,7 +52,7 @@ class AzureSynthesizer(BaseSynthesizer):
         self._speech_config = speech_config
 
     async def synthesize(
-        self, text: str, language: str, voice: Optional[str] = None
+        self, text: str, language: str, voice: str | None = None
     ) -> bytes:
         voice_name = voice or self._select_voice(language)
         self._speech_config.speech_synthesis_voice_name = voice_name
@@ -104,7 +103,7 @@ class CoquiSynthesizer(BaseSynthesizer):
         self._tts = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2")
 
     async def synthesize(
-        self, text: str, language: str, voice: Optional[str] = None
+        self, text: str, language: str, voice: str | None = None
     ) -> bytes:
         wav_path = Path("data/tmp_tts.wav")
         wav_path.parent.mkdir(parents=True, exist_ok=True)
@@ -119,6 +118,7 @@ class CoquiSynthesizer(BaseSynthesizer):
         )
 
         import io
+
         import soundfile as sf  # lazy import
 
         audio_array, sample_rate = sf.read(str(wav_path), dtype="float32")

@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -42,18 +41,18 @@ class Settings(BaseSettings):
 
     # Text to speech
     tts_provider: Literal["azure", "coqui"] = Field(default="azure")
-    azure_speech_key: Optional[str] = Field(default=None)
-    azure_speech_region: Optional[str] = Field(default=None)
+    azure_speech_key: str | None = Field(default=None)
+    azure_speech_region: str | None = Field(default=None)
     default_voice_female: str = Field(default="de-CH-LeniNeural")
 
     # LLM connectivity
     llm_provider: Literal["self_hosted_vllm", "openai", "aleph_alpha"] = Field(
         default="self_hosted_vllm"
     )
-    llm_endpoint: Optional[str] = Field(
+    llm_endpoint: str | None = Field(
         default=None, description="HTTP endpoint for the self-hosted inference server."
     )
-    llm_api_key: Optional[str] = Field(default=None)
+    llm_api_key: str | None = Field(default=None)
     llm_model: str = Field(
         default="meta-llama/Meta-Llama-3-8B-Instruct",
         description="Model identifier for the selected provider.",
@@ -63,11 +62,11 @@ class Settings(BaseSettings):
     extraction_confidence_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
 
     # Action bridge
-    nextjs_action_endpoint: Optional[str] = Field(
+    nextjs_action_endpoint: str | None = Field(
         default=None,
         description="Optional Next.js action endpoint to notify about structured events.",
     )
-    nextjs_action_api_key: Optional[str] = Field(default=None)
+    nextjs_action_api_key: str | None = Field(default=None)
 
     data_dir: Path = Field(default=Path("./data"))
 

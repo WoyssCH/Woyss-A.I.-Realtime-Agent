@@ -20,12 +20,12 @@ class Conversation(Base):
     conversation_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     started_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
-    utterances: Mapped[list["Utterance"]] = relationship(
+    utterances: Mapped[list[Utterance]] = relationship(
         back_populates="conversation",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    structured_facts: Mapped[list["StructuredFact"]] = relationship(
+    structured_facts: Mapped[list[StructuredFact]] = relationship(
         back_populates="conversation",
         cascade="all, delete-orphan",
         lazy="selectin",
@@ -48,8 +48,8 @@ class Utterance(Base):
     started_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
     attributes: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
-    conversation: Mapped["Conversation"] = relationship(back_populates="utterances")
-    structured_facts: Mapped[list["StructuredFact"]] = relationship(
+    conversation: Mapped[Conversation] = relationship(back_populates="utterances")
+    structured_facts: Mapped[list[StructuredFact]] = relationship(
         back_populates="source_utterance",
         lazy="selectin",
     )
@@ -74,5 +74,5 @@ class StructuredFact(Base):
     evidence: Mapped[str] = mapped_column(Text())
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
-    conversation: Mapped["Conversation"] = relationship(back_populates="structured_facts")
-    source_utterance: Mapped["Utterance"] = relationship(back_populates="structured_facts")
+    conversation: Mapped[Conversation] = relationship(back_populates="structured_facts")
+    source_utterance: Mapped[Utterance] = relationship(back_populates="structured_facts")

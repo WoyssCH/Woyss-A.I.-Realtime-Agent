@@ -6,12 +6,11 @@ import asyncio
 import logging
 import math
 from dataclasses import asdict, dataclass, field
-from typing import Dict, List, Optional
 
-from config.settings import get_settings
 from agents.actions import ActionPlanner
 from agents.extraction import InformationExtractor
 from agents.schemas import ActionDirective, StructuredFactPayload, UtteranceInput
+from config.settings import get_settings
 from db.repository import ConversationRepository
 from integrations.nextjs_bridge import NextJSBridge
 from llm.factory import build_llm_client
@@ -45,8 +44,8 @@ class ConversationState:
     """Tracks conversational history for LLM context."""
 
     conversation_id: str
-    history: List[dict[str, str]] = field(default_factory=list)
-    utterances: List[ConversationUtterance] = field(default_factory=list)
+    history: list[dict[str, str]] = field(default_factory=list)
+    utterances: list[ConversationUtterance] = field(default_factory=list)
     preferred_language: str | None = None
 
 
@@ -62,7 +61,7 @@ class AssistantAgent:
         self._action_planner = ActionPlanner(self._llm)
         self._nextjs_bridge = self._build_nextjs_bridge()
         self._repo = ConversationRepository()
-        self._states: Dict[str, ConversationState] = {}
+        self._states: dict[str, ConversationState] = {}
 
     async def start_conversation(self, conversation_id: str) -> None:
         await self._repo.get_or_create_conversation(conversation_id)
@@ -157,7 +156,7 @@ class AssistantAgent:
         response = await self._llm.chat(state.history, temperature=0.2)
         return response.strip()
 
-    def _aggregate_confidence(self, segments: List[TranscriptionSegment]) -> float:
+    def _aggregate_confidence(self, segments: list[TranscriptionSegment]) -> float:
         if not segments:
             return 0.0
         confidences = [self._segment_confidence(segment.logprob) for segment in segments]
@@ -213,7 +212,7 @@ class AssistantAgent:
         await self._repo.add_structured_facts(state.conversation_id, fact_dicts)
         return facts
 
-    async def _maybe_trigger_actions(self, state: ConversationState) -> List[ActionDirective]:
+    async def _maybe_trigger_actions(self, state: ConversationState) -> list[ActionDirective]:
         try:
             recent = [entry.payload for entry in state.utterances[-8:]]
             directives = await self._action_planner.plan(recent)
@@ -226,7 +225,7 @@ class AssistantAgent:
             LOGGER.exception("Action dispatch failed: %s", exc)
             return []
 
-    def _build_nextjs_bridge(self) -> Optional[NextJSBridge]:
+    def _build_nextjs_bridge(self) -> NextJSBridge | None:
         try:
             return NextJSBridge()
         except ValueError:

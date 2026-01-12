@@ -6,9 +6,10 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+from alembic import context
 
 # Alembic Config object, provides access to values in alembic.ini
 config = context.config
@@ -21,11 +22,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_PATH = REPO_ROOT / "src"
 sys.path.insert(0, str(SRC_PATH))
 
-from config.settings import get_settings  # noqa: E402
-from db.base import Base  # noqa: E402
-
 # Import models so metadata is populated.
 import db.models  # noqa: F401,E402
+from config.settings import get_settings  # noqa: E402
+from db.base import Base  # noqa: E402
 
 target_metadata = Base.metadata
 

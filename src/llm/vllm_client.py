@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterable, List
+from collections.abc import Iterable
 
 import httpx
 
@@ -71,7 +71,7 @@ class VLLMClient(BaseLLMClient):
 
         response.raise_for_status()
         data = response.json()
-        choices: List[dict] = data.get("choices", [])
+        choices: list[dict] = data.get("choices", [])
         if not choices:
             raise RuntimeError("LLM response contains no choices.")
         return choices[0]["message"]["content"]

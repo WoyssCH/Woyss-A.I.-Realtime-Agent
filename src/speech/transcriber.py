@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import io
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Optional
 
 import numpy as np
 import soundfile as sf
@@ -42,7 +42,7 @@ class WhisperTranscriber:
         )
 
     def transcribe(
-        self, audio_bytes: bytes, language_hint: Optional[str] = None
+        self, audio_bytes: bytes, language_hint: str | None = None
     ) -> list[TranscriptionSegment]:
         """Transcribe raw audio bytes into text segments."""
 
@@ -85,7 +85,7 @@ class WhisperTranscriber:
         return results
 
     @staticmethod
-    def _initial_prompt(language_hint: Optional[str]) -> Optional[str]:
+    def _initial_prompt(language_hint: str | None) -> str | None:
         if not language_hint:
             return (
                 "Dies ist ein Gespraech in einer Schweizer Zahnarztpraxis. "
@@ -102,7 +102,7 @@ class WhisperTranscriber:
         return prompts.get(language_hint.split("-")[0], None)
 
     @staticmethod
-    def _safe_detect(text: str) -> Optional[str]:
+    def _safe_detect(text: str) -> str | None:
         try:
             return detect(text)
         except Exception:  # langdetect throws generic exceptions

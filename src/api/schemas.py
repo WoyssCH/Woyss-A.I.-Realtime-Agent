@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import List
-
 from pydantic import BaseModel, Field
 
 
@@ -19,8 +17,8 @@ class AudioUploadResponse(BaseModel):
     confidence: float
     assistant_audio_b64: str = Field(description="Base64-encoded audio data for playback.")
     assistant_audio_mime: str = Field(description="MIME type for the returned audio bytes.")
-    structured_facts: List[dict]
-    actions: List[dict]
+    structured_facts: list[dict]
+    actions: list[dict]
 
 
 class StructuredFactResponse(BaseModel):

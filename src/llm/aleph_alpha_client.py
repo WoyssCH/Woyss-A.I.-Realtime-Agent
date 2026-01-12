@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterable
+from collections.abc import Iterable
 
 from aleph_alpha_client import (
     AsyncClient,
-    ChatRequest,
     ChatMessage,
+    ChatRequest,
     CompletionRequest,
     Prompt,
 )
