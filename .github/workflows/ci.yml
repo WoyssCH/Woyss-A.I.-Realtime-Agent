@@ -45,7 +45,7 @@ jobs:
         run: ruff check .
 
       - name: Pytest
-        run: pytest -q
+        run: pytest -q --junitxml=pytest-report.xml
 
       - name: Alembic migrate (smoke)
         env:
@@ -54,3 +54,11 @@ jobs:
         run: |
           mkdir -p data
           alembic upgrade head
+
+      - name: Archive test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-py${{ matrix.python-version }}
+          path: |
+            pytest-report.xml

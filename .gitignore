@@ -4,6 +4,7 @@ __pycache__/
 
 # Local runtime / generated
 /data/
+pytest-report.xml
 
 # DVC internals (never commit)
 /.dvc/tmp/
