@@ -6,11 +6,19 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
     """Centralized environment configuration."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
 
     environment: Literal["local", "dev", "prod"] = Field(default="local")
     log_level: str = Field(default="INFO")
@@ -19,6 +27,12 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="sqlite+aiosqlite:///./data/assistant.db",
         description="SQLAlchemy connection string.",
+    )
+
+    # Migrations / schema
+    auto_create_db_schema: bool = Field(
+        default=True,
+        description="If true, creates tables automatically on startup (useful for local/dev).",
     )
 
     # Speech recognition
@@ -57,15 +71,11 @@ class Settings(BaseSettings):
 
     data_dir: Path = Field(default=Path("./data"))
 
-    @validator("data_dir")
+    @field_validator("data_dir")
+    @classmethod
     def ensure_data_dir(cls, value: Path) -> Path:
         value.mkdir(parents=True, exist_ok=True)
         return value
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
 
 
 @lru_cache(maxsize=1)

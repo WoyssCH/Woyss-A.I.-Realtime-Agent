@@ -1,0 +1,17 @@
+# Minimal deps to run lint + unit tests in CI without heavy ML/audio installs.
+# Keep versions aligned with requirements.txt where applicable.
+
+fastapi==0.110.2
+httpx==0.27.0
+python-multipart==0.0.9
+
+sqlalchemy==2.0.45
+aiosqlite==0.20.0
+alembic==1.13.1
+
+pydantic==2.7.1
+pydantic-settings==2.12.0
+python-dotenv==1.0.1
+
+pytest==8.3.4
+ruff==0.6.9

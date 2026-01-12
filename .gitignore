@@ -6,3 +6,6 @@
 /src/integrations/__pycache__
 /src/llm/__pycache__
 /src/speech/__pycache__
+
+# Local runtime / generated
+/data/
