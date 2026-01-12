@@ -77,14 +77,43 @@ Use `huggingface-cli download` to prefetch the models and mount the cache inside
 ## Branching & deployment workflow
 This repository uses environment-specific branches. Merges/pushes to each branch trigger GitHub Actions that automatically build and deploy to the matching environment.
 
-- `feature`  feature environment deployment (new features land here first)
-- `testing`  testing/staging environment deployment
-- `developement`  development environment deployment
-- `production`  production environment deployment
+- `feature` -> feature environment deployment (new features land here first)
+- `testing` -> testing/staging environment deployment
+- `developement` -> development environment deployment
+- `production` -> production environment deployment
 
 Notes:
 - Keep PRs small and merge forward (e.g. `feature`  `testing`  `developement`  `production`) so each environment receives the same changes in order.
 - Each branch includes (or is expected to include) the GitHub Actions workflow files required to build the Docker image and deploy to its environment.
+
+## Data versioning (DVC)
+This repo is DVC-initialized for versioning large data artifacts (datasets, sample audio, model files) without bloating Git.
+
+Common commands:
+- Track a folder/file: `dvc add data/my_dataset/`
+- Push tracked data to your configured remote: `dvc push`
+- Pull tracked data (e.g. on a server/CI runner): `dvc pull`
+
+Configure a default remote (example):
+```bash
+dvc remote add -d origin <REMOTE_URL>
+dvc remote modify origin --local <REMOTE_AUTH_KEY> <REMOTE_AUTH_VALUE>
+```
+
+Notes:
+- Store credentials in GitHub Actions secrets (or `.dvc/config.local`) rather than committing them.
+- If you deploy from CI, ensure the workflow runs `dvc pull` before building/running if your image/runtime depends on tracked artifacts.
+
+## Database migrations (Alembic)
+This project uses Alembic for database migrations.
+
+Common commands:
+- Create a new revision (after changing models): `alembic revision -m "describe change" --autogenerate`
+- Apply migrations: `alembic upgrade head`
+- Roll back one migration: `alembic downgrade -1`
+
+Notes:
+- In production-like environments, set `AUTO_CREATE_DB_SCHEMA=false` to avoid `create_all()` and rely on migrations.
 
 ## Accuracy safeguards
 - Whisper with beam search and contextual prompts for Swiss dental vocabulary

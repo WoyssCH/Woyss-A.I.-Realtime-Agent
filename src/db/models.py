@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import JSON, ForeignKey, String, Text
@@ -18,7 +18,7 @@ class Conversation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     conversation_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
     utterances: Mapped[list["Utterance"]] = relationship(
         back_populates="conversation",
@@ -45,7 +45,7 @@ class Utterance(Base):
     language: Mapped[str] = mapped_column(String(16))
     text: Mapped[str] = mapped_column(Text())
     confidence: Mapped[float] = mapped_column()
-    started_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    started_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
     attributes: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="utterances")
@@ -72,7 +72,7 @@ class StructuredFact(Base):
     value: Mapped[str] = mapped_column(Text())
     confidence: Mapped[float] = mapped_column()
     evidence: Mapped[str] = mapped_column(Text())
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
     conversation: Mapped["Conversation"] = relationship(back_populates="structured_facts")
     source_utterance: Mapped["Utterance"] = relationship(back_populates="structured_facts")

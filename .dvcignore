@@ -1,0 +1,16 @@
+# Add patterns of files dvc should ignore, which could improve
+# the performance. Learn more at
+# https://dvc.org/doc/user-guide/dvcignore
+
+# Virtualenv / Python artifacts
+.venv/
+**/__pycache__/
+**/*.pyc
+
+# Local runtime data (do not version)
+data/assistant.db
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

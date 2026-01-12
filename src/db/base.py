@@ -23,7 +23,14 @@ AsyncSessionFactory = async_sessionmaker(
 
 
 async def init_db() -> None:
-    """Create database schema if it does not exist."""
+    """Initialize database schema.
+
+    In local/dev environments we can auto-create tables. In higher environments,
+    prefer Alembic migrations and set `AUTO_CREATE_DB_SCHEMA=false`.
+    """
+
+    if not settings.auto_create_db_schema:
+        return
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
