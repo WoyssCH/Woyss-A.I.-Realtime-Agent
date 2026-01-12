@@ -1,0 +1,8 @@
+/src/__pycache__
+/src/agents/__pycache__
+/src/api/__pycache__
+/src/config/__pycache__
+/src/db/__pycache__
+/src/integrations/__pycache__
+/src/llm/__pycache__
+/src/speech/__pycache__
