@@ -9,3 +9,6 @@
 
 # Local runtime / generated
 /data/
+
+# DVC internals (never commit)
+/.dvc/tmp/
