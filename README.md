@@ -77,13 +77,15 @@ Use `huggingface-cli download` to prefetch the models and mount the cache inside
 ## Branching & deployment workflow
 This repository uses environment-specific branches. Merges/pushes to each branch trigger GitHub Actions that automatically build and deploy to the matching environment.
 
+- `main` -> default showcase branch (stable demo/reference branch)
 - `feature` -> feature environment deployment (new features land here first)
 - `testing` -> testing/staging environment deployment
 - `developement` -> development environment deployment
 - `production` -> production environment deployment
 
 Notes:
-- Keep PRs small and merge forward (e.g. `feature`  `testing`  `developement`  `production`) so each environment receives the same changes in order.
+- `main` should remain runnable and presentable (used for showcasing and as the default branch).
+- Keep PRs small and merge forward (e.g. `feature` -> `testing` -> `developement` -> `production`) so each environment receives the same changes in order.
 - Each branch includes (or is expected to include) the GitHub Actions workflow files required to build the Docker image and deploy to its environment.
 
 ## Data versioning (DVC)
