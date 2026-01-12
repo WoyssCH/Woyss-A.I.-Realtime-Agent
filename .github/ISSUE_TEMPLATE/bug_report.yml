@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a reproducible problem
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please include as much detail as possible.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected.
+      placeholder: "When I call /api/... I get ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal, repeatable sequence.
+      placeholder: |
+        1. Start server with ...
+        2. Call endpoint ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / traceback
+      description: Paste relevant logs (redact secrets).
+      render: shell
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - local
+        - developement
+        - testing
+        - production
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit / tag
+      description: The commit SHA or release tag where you saw this.
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Config (redacted)
+      description: Relevant env vars (redact keys), e.g. `TTS_PROVIDER`, `LLM_PROVIDER`, `DATABASE_URL`.
+      render: shell

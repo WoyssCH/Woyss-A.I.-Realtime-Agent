@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest an improvement or new capability
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share the outcome you want and why it matters.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should be built/changed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches or workarounds.
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - API (FastAPI)
+        - Agents / Orchestration
+        - LLM integration
+        - Speech (Whisper/TTS)
+        - Database
+        - CI/CD
+        - Documentation
+        - Other
