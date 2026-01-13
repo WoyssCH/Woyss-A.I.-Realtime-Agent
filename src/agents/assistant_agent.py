@@ -176,6 +176,107 @@ class AssistantAgent:
             "actions": [action.model_dump() for action in actions],
         }
 
+    async def handle_text(
+        self,
+        conversation_id: str,
+        *,
+        speaker: str,
+        text: str,
+        language: str = "de",
+        confidence: float = 1.0,
+        attributes: dict | None = None,
+    ) -> dict:
+        await self.start_conversation(conversation_id)
+        state = await self._load_state(conversation_id)
+
+        speaker_norm = normalize_speaker(speaker)
+        cleaned = text.strip()
+        if not cleaned:
+            raise NoSpeechDetectedError()
+
+        utterance_payload = UtteranceInput(
+            conversation_id=conversation_id,
+            speaker=speaker_norm,
+            language=language,
+            text=cleaned,
+            confidence=confidence,
+            attributes=attributes or {},
+        )
+
+        try:
+            db_utterance = await self._repo.add_utterance(
+                conversation_id,
+                speaker=speaker_norm,
+                language=language,
+                text=cleaned,
+                confidence=confidence,
+                attributes=utterance_payload.attributes,
+            )
+        except Exception as exc:
+            raise DatabaseOperationError() from exc
+
+        state.utterances.append(ConversationUtterance(payload=utterance_payload, db_id=db_utterance.id))
+        state.history.append({"role": "user", "content": content_with_speaker_prefix(speaker_norm, cleaned)})
+        state.preferred_language = language
+
+        try:
+            assistant_text = await self._generate_response(state)
+        except Exception as exc:
+            raise LLMFailedError() from exc
+
+        try:
+            assistant_db = await self._repo.add_utterance(
+                conversation_id,
+                speaker="assistant",
+                language=language,
+                text=assistant_text,
+                confidence=1.0,
+                attributes={},
+            )
+        except Exception as exc:
+            raise DatabaseOperationError() from exc
+
+        assistant_payload = UtteranceInput(
+            conversation_id=conversation_id,
+            speaker="assistant",
+            language=language,
+            text=assistant_text,
+            confidence=1.0,
+            attributes={},
+        )
+        state.utterances.append(ConversationUtterance(payload=assistant_payload, db_id=assistant_db.id))
+        state.history.append({"role": "assistant", "content": assistant_text})
+
+        try:
+            structured_facts = await self._extract_structured_data(state)
+        except Exception as exc:
+            LOGGER.exception("Structured extraction failed: %s", exc)
+            structured_facts = []
+
+        actions = await self._maybe_trigger_actions(state)
+
+        return {
+            "transcript": cleaned,
+            "assistant_response": assistant_text,
+            "language": language,
+            "confidence": confidence,
+            "structured_facts": [fact.model_dump() for fact in structured_facts],
+            "actions": [action.model_dump() for action in actions],
+        }
+
+    async def transcribe_audio_bytes(
+        self,
+        audio_bytes: bytes,
+        *,
+        language_hint: str | None = None,
+    ) -> tuple[str, str | None]:
+        segments = await asyncio.to_thread(self._transcriber.transcribe, audio_bytes, language_hint)
+        if not segments:
+            raise NoSpeechDetectedError()
+        merged_text = merge_segments(segments)
+        language = segments[0].language if segments else language_hint
+        return merged_text, language
+
     async def _load_state(self, conversation_id: str) -> ConversationState:
         try:
             recent = await self._repo.list_recent_utterances(conversation_id, limit=20)

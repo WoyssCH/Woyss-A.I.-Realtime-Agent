@@ -61,9 +61,9 @@ def app(tmp_path_factory: pytest.TempPathFactory):
 @pytest.fixture()
 def client(app):
     # Override agent dependency so tests never instantiate Whisper/TTS/LLM.
-    import api.routes as routes
+    import api.dependencies as deps
 
-    app.dependency_overrides[routes.get_agent] = lambda: FakeAgent()
+    app.dependency_overrides[deps.get_agent] = lambda: FakeAgent()
 
     with TestClient(app) as test_client:
         yield test_client

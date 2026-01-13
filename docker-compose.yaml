@@ -17,3 +17,41 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+
+  media:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    command: ["python", "-m", "telephony.media_server", "--host", "0.0.0.0", "--port", "20000"]
+    ports:
+      - "20000:20000/udp"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  ari:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    command: ["python", "-m", "telephony.ari_controller"]
+    depends_on:
+      - asterisk
+      - media
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  asterisk:
+    image: asterisk/asterisk:20
+    ports:
+      - "5060:5060/udp"  # SIP (UDP)
+      - "5060:5060/tcp"  # SIP (TCP)
+      - "8088:8088"      # ARI/HTTP
+      - "10000-20000:10000-20000/udp"  # RTP
+    volumes:
+      - ./docker/asterisk:/etc/asterisk:ro
+    restart: unless-stopped

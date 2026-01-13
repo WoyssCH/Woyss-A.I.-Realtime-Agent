@@ -14,9 +14,9 @@ class ErroringAgent:
 
 
 def test_upload_audio_maps_assistant_errors_to_http(app):
-    import api.routes as routes
+    import api.dependencies as deps
 
-    app.dependency_overrides[routes.get_agent] = lambda: ErroringAgent()
+    app.dependency_overrides[deps.get_agent] = lambda: ErroringAgent()
 
     with TestClient(app) as client:
         response = client.post(
