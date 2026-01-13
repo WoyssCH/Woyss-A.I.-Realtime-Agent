@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 from typing import Protocol
 
 
@@ -30,3 +30,17 @@ class BaseLLMClient(ABC):
         temperature: float = 0.1,
     ) -> str:
         """Return a chat-style completion."""
+
+    async def stream_chat(
+        self,
+        messages: Iterable[dict[str, str]],
+        *,
+        temperature: float = 0.1,
+    ) -> AsyncIterator[str]:
+        """Yield the assistant response incrementally.
+
+        Providers can override this to stream tokens/deltas. The default
+        implementation falls back to a single non-streaming call.
+        """
+
+        yield await self.chat(messages, temperature=temperature)

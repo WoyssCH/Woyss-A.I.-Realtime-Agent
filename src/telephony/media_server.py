@@ -7,6 +7,7 @@ import os
 import secrets
 import socket
 from dataclasses import dataclass
+from typing import Final
 
 import numpy as np
 
@@ -14,8 +15,13 @@ from config.settings import get_settings
 from integrations.twilio_streaming import pcm16_resample, pcm16_to_wav_bytes
 from telephony.g711 import ulaw_decode, ulaw_encode
 from telephony.rtp import build_rtp_packet, parse_rtp_packet
+from telephony.vad import EnergyVAD, VADConfig
 
 LOGGER = logging.getLogger(__name__)
+
+
+FRAME_MS: Final[int] = 20
+FRAME_SAMPLES_8K: Final[int] = 160
 
 
 @dataclass(slots=True)
@@ -25,7 +31,10 @@ class StreamState:
     out_ssrc: int
     out_sequence: int
     out_timestamp: int
-    pcm8k: list[np.ndarray]
+    vad: EnergyVAD
+    speaking_task: asyncio.Task | None
+    speech_task: asyncio.Task | None
+    barge_in: asyncio.Event
 
 
 class RtpMediaServer:
@@ -45,6 +54,14 @@ class RtpMediaServer:
         self._payload_type = payload_type
         self._sock: socket.socket | None = None
         self._streams: dict[int, StreamState] = {}
+        self._agent = None
+
+    def _get_agent(self):
+        if self._agent is None:
+            from agents.assistant_agent import AssistantAgent
+
+            self._agent = AssistantAgent()
+        return self._agent
 
     async def run_forever(self) -> None:
         loop = asyncio.get_running_loop()
@@ -72,34 +89,55 @@ class RtpMediaServer:
                     out_ssrc=secrets.randbits(32),
                     out_sequence=secrets.randbits(16),
                     out_timestamp=secrets.randbits(32),
-                    pcm8k=[],
+                    vad=EnergyVAD(VADConfig(frame_ms=FRAME_MS)),
+                    speaking_task=None,
+                    speech_task=None,
+                    barge_in=asyncio.Event(),
                 )
                 self._streams[pkt.ssrc] = stream
                 LOGGER.info("New RTP stream ssrc=%s from %s", pkt.ssrc, addr)
 
             stream.remote_addr = (addr[0], addr[1])
             pcm8k = ulaw_decode(pkt.payload)
-            if pcm8k.size:
-                stream.pcm8k.append(pcm8k)
+            if not pcm8k.size:
+                continue
 
-            # Simple chunking heuristic for scaffolding: every ~1.2s at 8kHz.
-            buffered = sum(x.size for x in stream.pcm8k)
-            if buffered >= 9600:
-                audio = np.concatenate(stream.pcm8k)
-                stream.pcm8k.clear()
-                asyncio.create_task(self.on_utterance(stream, audio))
+            # Process in fixed 20ms frames for VAD + barge-in.
+            for i in range(0, pcm8k.size, FRAME_SAMPLES_8K):
+                frame = pcm8k[i : i + FRAME_SAMPLES_8K]
+                if frame.size < FRAME_SAMPLES_8K:
+                    break
+
+                # Barge-in: if we detect speech while speaking, stop playback immediately.
+                rms = float(np.sqrt(np.mean(frame.astype(np.float32) ** 2)))
+                thr = stream.vad._threshold()  # noqa: SLF001
+                if (
+                    not stream.barge_in.is_set()
+                    and stream.speaking_task
+                    and not stream.speaking_task.done()
+                    and rms >= thr
+                ):
+                    stream.barge_in.set()
+                    stream.speaking_task.cancel()
+
+                ended, utterance = stream.vad.push_frame(frame)
+                if ended and utterance is not None and utterance.size:
+                    # Cancel any ongoing response generation/speaking for this stream.
+                    if stream.speech_task and not stream.speech_task.done():
+                        stream.speech_task.cancel()
+                    if stream.speaking_task and not stream.speaking_task.done():
+                        stream.speaking_task.cancel()
+                    stream.barge_in.clear()
+                    stream.speech_task = asyncio.create_task(self.on_utterance(stream, utterance))
 
     async def on_utterance(self, stream: StreamState, pcm8k: np.ndarray) -> None:
-        """Handle a user utterance (PCM16 @ 8kHz). Override/extend in production."""
+        """Handle a user utterance (PCM16 @ 8kHz) with low-latency streaming response."""
 
-        # Resample to 16k for WhisperTranscriber (faster-whisper expects 16k when passing arrays).
+        agent = self._get_agent()
+
+        # Resample to 16k for Whisper.
         pcm16k = pcm16_resample(pcm8k, 8000, 16000)
         wav = pcm16_to_wav_bytes(pcm16k, 16000)
-
-        # Import lazily to keep module import cheap.
-        from agents.assistant_agent import AssistantAgent
-
-        agent = AssistantAgent()
 
         try:
             transcript, _lang = await agent.transcribe_audio_bytes(wav, language_hint=None)
@@ -107,38 +145,70 @@ class RtpMediaServer:
             LOGGER.exception("ASR failed")
             return
 
-        if not transcript.strip():
+        transcript = transcript.strip()
+        if not transcript:
             return
 
-        try:
-            result = await agent.handle_text(
+        # Stream assistant text; convert to sentence-sized chunks and synthesize each chunk.
+        chunk_queue: asyncio.Queue[str] = asyncio.Queue()
+
+        async def producer() -> None:
+            buf = ""
+            async for tok in agent.handle_text_stream(
                 conversation_id=f"pstn:{stream.in_ssrc}",
                 speaker="patient",
                 text=transcript,
                 language="de",
                 attributes={"telephony": {"ssrc": stream.in_ssrc}},
-            )
-            reply_text = str(result.get("assistant_response") or "")
-        except Exception:
-            LOGGER.exception("Agent pipeline failed")
-            return
+            ):
+                buf += tok
+                # Emit on sentence end or size.
+                if any(p in buf for p in [".", "!", "?", "\n"]) or len(buf) >= 220:
+                    text_chunk = buf.strip()
+                    buf = ""
+                    if text_chunk:
+                        await chunk_queue.put(text_chunk)
 
-        if not reply_text:
-            return
+            tail = buf.strip()
+            if tail:
+                await chunk_queue.put(tail)
 
-        # Generate local TTS audio (WAV bytes), convert to 8kHz PCMU RTP and send.
+            await chunk_queue.put("")  # sentinel
+
+        async def consumer() -> None:
+            while True:
+                if stream.barge_in.is_set():
+                    return
+
+                chunk = await chunk_queue.get()
+                if chunk == "":
+                    return
+                if not chunk:
+                    continue
+
+                try:
+                    tts_audio = await agent._tts.synthesize(chunk, language="de")  # noqa: SLF001
+                except Exception:
+                    LOGGER.exception("TTS failed")
+                    return
+
+                await self._send_wav_as_rtp_ulaw(
+                    stream,
+                    tts_audio,
+                    dst_rate=8000,
+                    frame_ms=FRAME_MS,
+                )
+
+        prod_task = asyncio.create_task(producer())
+        stream.speaking_task = asyncio.create_task(consumer())
         try:
-            tts_audio = await agent._tts.synthesize(reply_text, language="de")  # noqa: SLF001
+            await asyncio.gather(prod_task, stream.speaking_task)
+        except asyncio.CancelledError:
+            prod_task.cancel()
+            if stream.speaking_task:
+                stream.speaking_task.cancel()
         except Exception:
-            LOGGER.exception("TTS failed")
-            return
-
-        await self._send_wav_as_rtp_ulaw(
-            stream,
-            tts_audio,
-            dst_rate=8000,
-            frame_ms=20,
-        )
+            LOGGER.exception("Streaming response failed")
 
     async def _send_wav_as_rtp_ulaw(
         self,
@@ -174,6 +244,8 @@ class RtpMediaServer:
 
         loop = asyncio.get_running_loop()
         for i in range(0, pcm.size, payload_samples):
+            if stream.barge_in.is_set():
+                return
             chunk = pcm[i : i + payload_samples]
             if chunk.size < payload_samples:
                 # pad with silence

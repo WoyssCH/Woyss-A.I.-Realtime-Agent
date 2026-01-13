@@ -1,0 +1,10 @@
+{
+    email {$TLS_EMAIL}
+}
+
+{$PUBLIC_HOSTNAME} {
+    encode zstd gzip
+
+    # FastAPI (Twilio webhooks + API)
+    reverse_proxy api:8080
+}

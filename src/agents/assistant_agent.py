@@ -264,6 +264,109 @@ class AssistantAgent:
             "actions": [action.model_dump() for action in actions],
         }
 
+    async def handle_text_stream(
+        self,
+        conversation_id: str,
+        *,
+        speaker: str,
+        text: str,
+        language: str = "de",
+        confidence: float = 1.0,
+        attributes: dict | None = None,
+        temperature: float = 0.2,
+    ):
+        """Stream the assistant response text while persisting conversation state.
+
+        This keeps the LLM backend swappable: any provider can implement
+        `BaseLLMClient.stream_chat`; if not, it will fall back to a single chunk.
+
+        Side effects:
+        - Persists the user utterance immediately.
+        - Streams assistant text via LLM.
+        - Persists the assistant utterance at the end.
+        - Triggers extraction/actions (best-effort) after assistant completion.
+        """
+
+        await self.start_conversation(conversation_id)
+        state = await self._load_state(conversation_id)
+
+        speaker_norm = normalize_speaker(speaker)
+        cleaned = text.strip()
+        if not cleaned:
+            raise NoSpeechDetectedError()
+
+        utterance_payload = UtteranceInput(
+            conversation_id=conversation_id,
+            speaker=speaker_norm,
+            language=language,
+            text=cleaned,
+            confidence=confidence,
+            attributes=attributes or {},
+        )
+
+        try:
+            db_utterance = await self._repo.add_utterance(
+                conversation_id,
+                speaker=speaker_norm,
+                language=language,
+                text=cleaned,
+                confidence=confidence,
+                attributes=utterance_payload.attributes,
+            )
+        except Exception as exc:
+            raise DatabaseOperationError() from exc
+
+        state.utterances.append(ConversationUtterance(payload=utterance_payload, db_id=db_utterance.id))
+        state.history.append({"role": "user", "content": content_with_speaker_prefix(speaker_norm, cleaned)})
+        state.preferred_language = language
+
+        assistant_parts: list[str] = []
+        try:
+            async for chunk in self._llm.stream_chat(state.history, temperature=temperature):
+                if not chunk:
+                    continue
+                assistant_parts.append(chunk)
+                yield chunk
+        except Exception as exc:
+            raise LLMFailedError() from exc
+
+        assistant_text = "".join(assistant_parts).strip()
+        if not assistant_text:
+            assistant_text = "Entschuldigung, ich habe gerade keine Antwort."  # safe fallback
+
+        try:
+            assistant_db = await self._repo.add_utterance(
+                conversation_id,
+                speaker="assistant",
+                language=language,
+                text=assistant_text,
+                confidence=1.0,
+                attributes={},
+            )
+        except Exception as exc:
+            raise DatabaseOperationError() from exc
+
+        assistant_payload = UtteranceInput(
+            conversation_id=conversation_id,
+            speaker="assistant",
+            language=language,
+            text=assistant_text,
+            confidence=1.0,
+            attributes={},
+        )
+        state.utterances.append(ConversationUtterance(payload=assistant_payload, db_id=assistant_db.id))
+        state.history.append({"role": "assistant", "content": assistant_text})
+
+        try:
+            _ = await self._extract_structured_data(state)
+        except Exception as exc:
+            LOGGER.exception("Structured extraction failed: %s", exc)
+
+        try:
+            _ = await self._maybe_trigger_actions(state)
+        except Exception as exc:
+            LOGGER.exception("Action planning failed: %s", exc)
+
     async def transcribe_audio_bytes(
         self,
         audio_bytes: bytes,

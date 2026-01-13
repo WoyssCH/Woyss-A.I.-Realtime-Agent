@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 
 from openai import AsyncOpenAI
 
@@ -49,3 +49,26 @@ class OpenAIClient(BaseLLMClient):
             max_tokens=768,
         )
         return response.choices[0].message.content or ""
+
+    async def stream_chat(
+        self,
+        messages: Iterable[dict[str, str]],
+        *,
+        temperature: float = 0.1,
+    ) -> AsyncIterator[str]:
+        stream = await self._client.chat.completions.create(
+            model=self._model,
+            messages=list(messages),
+            temperature=temperature,
+            max_tokens=768,
+            stream=True,
+        )
+
+        async for event in stream:
+            try:
+                delta = event.choices[0].delta
+                chunk = getattr(delta, "content", None)
+            except Exception:  # pragma: no cover
+                chunk = None
+            if chunk:
+                yield chunk

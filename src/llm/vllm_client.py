@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 
 import httpx
 
@@ -75,3 +76,46 @@ class VLLMClient(BaseLLMClient):
         if not choices:
             raise RuntimeError("LLM response contains no choices.")
         return choices[0]["message"]["content"]
+
+    async def stream_chat(
+        self,
+        messages: Iterable[dict[str, str]],
+        *,
+        temperature: float = 0.1,
+    ) -> AsyncIterator[str]:
+        payload = {
+            "model": self._model,
+            "messages": list(messages),
+            "temperature": temperature,
+            "max_tokens": 768,
+            "stream": True,
+        }
+
+        client = httpx.AsyncClient(timeout=90)
+        try:
+            async with client.stream(
+                "POST",
+                f"{self._endpoint}/v1/chat/completions",
+                json=payload,
+                headers=self._headers(),
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+
+                    data = line.removeprefix("data:").strip()
+                    if data == "[DONE]":
+                        break
+
+                    try:
+                        event = json.loads(data)
+                        delta = event["choices"][0].get("delta") or {}
+                        chunk = delta.get("content")
+                    except Exception:  # pragma: no cover
+                        chunk = None
+
+                    if chunk:
+                        yield str(chunk)
+        finally:
+            await client.aclose()

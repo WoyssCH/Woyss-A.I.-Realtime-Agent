@@ -7,7 +7,7 @@ This document summarises the steps required to run the Swiss dental voice assist
 The repository includes:
 
 - `Dockerfile` - builds the FastAPI application with `uvicorn`.
-- `docker-compose.yaml` - example runtime configuration exposing the API on port `8080` and requesting GPU access (Docker Compose v2 syntax).
+- `docker-compose.yaml` - all-in-one runtime: HTTPS reverse proxy (Caddy), API, Asterisk (SIP/RTP + ARI), and Python media services.
 
 Adjust environment variables by copying `.env.example` to `.env` before building.
 
@@ -19,6 +19,15 @@ docker compose up -d
 ```
 
 The container expects the writable directory `./data` (mounted automatically) for SQLite storage and any temporary audio files.
+
+For local/offline model caching, create `./models` and mount it into containers (already configured in `docker-compose.yaml`).
+
+### Ports (single-server)
+
+- `80/tcp`, `443/tcp`: Caddy (HTTPS) for Twilio webhooks and API.
+- `5060/udp` (and optionally `5060/tcp`): SIP into Asterisk.
+- `10000-20000/udp`: RTP media between Twilio and Asterisk.
+- `8088/tcp`: ARI/HTTP (should remain private; used by the `ari` service).
 
 ## 2. Recommended Hugging Face models
 

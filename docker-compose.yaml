@@ -1,14 +1,31 @@
 version: "3.9"
 
 services:
+  caddy:
+    image: caddy:2
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
   api:
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
       - .env
-    ports:
-      - "8080:8080"
+    # In production, expose only via Caddy. For local debugging you can optionally
+    # map 8080:8080.
+    # ports:
+    #   - "8080:8080"
     deploy:
       resources:
         reservations:
@@ -16,6 +33,7 @@ services:
             - capabilities: ["gpu"]
     volumes:
       - ./data:/app/data
+      - ./models:/app/models
     restart: unless-stopped
 
   media:
@@ -27,8 +45,14 @@ services:
     command: ["python", "-m", "telephony.media_server", "--host", "0.0.0.0", "--port", "20000"]
     ports:
       - "20000:20000/udp"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
     volumes:
       - ./data:/app/data
+      - ./models:/app/models
     restart: unless-stopped
 
   ari:
@@ -43,6 +67,7 @@ services:
       - media
     volumes:
       - ./data:/app/data
+      - ./models:/app/models
     restart: unless-stopped
 
   asterisk:
@@ -55,3 +80,7 @@ services:
     volumes:
       - ./docker/asterisk:/etc/asterisk:ro
     restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
