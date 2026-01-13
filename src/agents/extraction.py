@@ -7,31 +7,14 @@ import logging
 from collections.abc import Iterable
 
 from agents.schemas import StructuredFactPayload, UtteranceInput
+from agents.state_utils import canonical_speaker_label
 from config.settings import get_settings
 from llm.base import BaseLLMClient
+from prompts.loader import load_prompt
 
 LOGGER = logging.getLogger(__name__)
 
-
-
-EXTRACTION_SYSTEM_PROMPT = """Du bist eine akribische Praxisassistentin in einer Schweizer Zahnarztpraxis.
-Extrahiere nur absolut verifizierbare Fakten aus dem Gespraech.
-Wenn eine Information nicht zu 100% eindeutig bestaetigt ist, markiere sie als 'reject'.
-Antworte immer auf Schweizer Hochdeutsch.
-Liefere ausschliesslich ein JSON-Objekt mit folgendem Format:
-{
-  "facts": [
-    {
-      "category": "<Kategorie, z.B. Patientendaten, Termin, Versicherung>",
-      "field_name": "<FELD_NAME_UNDERSCORE>",
-      "value": "<wert>",
-      "confidence": <float 0-1>,
-      "evidence": "<exakte Textpassage>",
-      "reject": <true|false>
-    }
-  ]
-}
-"""
+EXTRACTION_SYSTEM_PROMPT = load_prompt("extraction_system.txt")
 
 
 VERIFICATION_PROMPT_TEMPLATE = """Kontext des Gespraechs:
@@ -74,7 +57,7 @@ class InformationExtractor:
     def _build_transcript(self, utterances: Iterable[UtteranceInput]) -> str:
         lines = []
         for utt in utterances:
-            lines.append(f"{utt.speaker.upper()} ({utt.language}): {utt.text}")
+            lines.append(f"{canonical_speaker_label(utt.speaker)} ({utt.language}): {utt.text}")
         return "\n".join(lines)
 
     async def _initial_pass(self, transcript_text: str) -> list[StructuredFactPayload]:

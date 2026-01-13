@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
-Speaker = Literal["patient", "assistant", "staff"]
+Speaker = Literal["patient", "assistant", "staff", "dentist"]
 
 
 class UtteranceInput(BaseModel):
@@ -18,10 +18,11 @@ class UtteranceInput(BaseModel):
     language: str
     text: str
     confidence: float = Field(ge=0.0, le=1.0)
-    started_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     attributes: dict[str, Any] = Field(default_factory=dict)
 
-    @validator("text")
+    @field_validator("text")
+    @classmethod
     def text_not_empty(cls, value: str) -> str:
         text = value.strip()
         if not text:

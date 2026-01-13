@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.exc import NoResultFound
 
 from db.base import AsyncSessionFactory
@@ -89,3 +89,21 @@ class ConversationRepository:
             )
             result = await session.execute(query)
             return list(result.scalars().all())
+
+    async def list_recent_utterances(
+        self,
+        conversation_id: str,
+        *,
+        limit: int = 20,
+    ) -> list[Utterance]:
+        async with AsyncSessionFactory() as session:
+            conversation = await self._get_conversation(session, conversation_id)
+            query = (
+                select(Utterance)
+                .where(Utterance.conversation_id == conversation.id)
+                .order_by(desc(Utterance.started_at), desc(Utterance.id))
+                .limit(limit)
+            )
+            result = await session.execute(query)
+            # Return oldest -> newest for LLM context.
+            return list(reversed(list(result.scalars().all())))

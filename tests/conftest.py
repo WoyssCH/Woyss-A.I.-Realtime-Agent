@@ -7,6 +7,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_PATH = REPO_ROOT / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
 
 class FakeAgent:
     async def start_conversation(self, conversation_id: str) -> None:
@@ -27,10 +32,6 @@ class FakeAgent:
 
 @pytest.fixture(scope="session")
 def app(tmp_path_factory: pytest.TempPathFactory):
-    repo_root = Path(__file__).resolve().parents[1]
-    src_path = repo_root / "src"
-    sys.path.insert(0, str(src_path))
-
     tmp_dir = tmp_path_factory.mktemp("runtime")
     db_path = tmp_dir / "assistant_test.db"
 

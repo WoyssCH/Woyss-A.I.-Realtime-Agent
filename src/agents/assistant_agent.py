@@ -8,27 +8,32 @@ import math
 from dataclasses import asdict, dataclass, field
 
 from agents.actions import ActionPlanner
+from agents.errors import (
+    DatabaseOperationError,
+    LLMFailedError,
+    NoSpeechDetectedError,
+    TranscriptionFailedError,
+    TTSFailedError,
+)
 from agents.extraction import InformationExtractor
 from agents.schemas import ActionDirective, StructuredFactPayload, UtteranceInput
+from agents.state_utils import (
+    build_llm_history,
+    content_with_speaker_prefix,
+    normalize_speaker,
+    preferred_language_from_utterances,
+)
 from config.settings import get_settings
 from db.repository import ConversationRepository
 from integrations.nextjs_bridge import NextJSBridge
 from llm.factory import build_llm_client
+from prompts.loader import load_prompt
 from speech.transcriber import TranscriptionSegment, WhisperTranscriber, merge_segments
 from speech.tts import BaseSynthesizer, build_synthesizer
 
 LOGGER = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = (
-    "Du bist Lea, eine warmherzige, professionelle und praezise "
-    "Praxisassistentin fuer eine Schweizer Zahnarztpraxis. "
-    "Du sprichst fliessend Schweizerdeutsch, Hochdeutsch, Franzoesisch, "
-    "Italienisch und Raetoromanisch. "
-    "Du verwendest eine freundliche weibliche Stimme und achtest auf "
-    "eine ruhige, vertrauenserweckende Gespraechsfuehrung. "
-    "Frage bei Unklarheiten nach, bestaetige wichtige Details und wiederhole "
-    "kritische Informationen zur Sicherheit."
-)
+SYSTEM_PROMPT = load_prompt("assistant_system.txt")
 
 
 @dataclass
@@ -61,64 +66,81 @@ class AssistantAgent:
         self._action_planner = ActionPlanner(self._llm)
         self._nextjs_bridge = self._build_nextjs_bridge()
         self._repo = ConversationRepository()
-        self._states: dict[str, ConversationState] = {}
 
     async def start_conversation(self, conversation_id: str) -> None:
-        await self._repo.get_or_create_conversation(conversation_id)
-        self._states.setdefault(
-            conversation_id,
-            ConversationState(
-                conversation_id=conversation_id,
-                history=[{"role": "system", "content": SYSTEM_PROMPT}],
-            ),
-        )
+        try:
+            await self._repo.get_or_create_conversation(conversation_id)
+        except Exception as exc:
+            raise DatabaseOperationError() from exc
 
     async def handle_audio(
         self, conversation_id: str, speaker: str, audio_bytes: bytes
     ) -> dict:
-        state = await self._ensure_state(conversation_id)
+        await self.start_conversation(conversation_id)
+        state = await self._load_state(conversation_id)
 
-        segments = await asyncio.to_thread(
-            self._transcriber.transcribe, audio_bytes, state.preferred_language
-        )
+        try:
+            segments = await asyncio.to_thread(
+                self._transcriber.transcribe, audio_bytes, state.preferred_language
+            )
+        except Exception as exc:
+            raise TranscriptionFailedError() from exc
+
         if not segments:
-            raise ValueError("Keine Spracheingabe erkannt.")
+            raise NoSpeechDetectedError()
 
         merged_text = merge_segments(segments)
         language = segments[0].language if segments else "de"
         confidence = self._aggregate_confidence(segments)
 
+        speaker_norm = normalize_speaker(speaker)
+
         utterance_payload = UtteranceInput(
             conversation_id=conversation_id,
-            speaker=speaker,
+            speaker=speaker_norm,
             language=language,
             text=merged_text,
             confidence=confidence,
             attributes={"segments": [asdict(segment) for segment in segments]},
         )
 
-        db_utterance = await self._repo.add_utterance(
-            conversation_id,
-            speaker=speaker,
-            language=language,
-            text=merged_text,
-            confidence=confidence,
-            attributes=utterance_payload.attributes,
-        )
+        try:
+            db_utterance = await self._repo.add_utterance(
+                conversation_id,
+                speaker=speaker_norm,
+                language=language,
+                text=merged_text,
+                confidence=confidence,
+                attributes=utterance_payload.attributes,
+            )
+        except Exception as exc:
+            raise DatabaseOperationError() from exc
 
         state.utterances.append(ConversationUtterance(payload=utterance_payload, db_id=db_utterance.id))
-        state.history.append({"role": "user", "content": merged_text})
+        state.history.append(
+            {
+                "role": "user",
+                "content": content_with_speaker_prefix(speaker_norm, merged_text),
+            }
+        )
         state.preferred_language = language
 
-        assistant_text = await self._generate_response(state)
-        assistant_db = await self._repo.add_utterance(
-            conversation_id,
-            speaker="assistant",
-            language=language,
-            text=assistant_text,
-            confidence=1.0,
-            attributes={},
-        )
+        try:
+            assistant_text = await self._generate_response(state)
+        except Exception as exc:
+            raise LLMFailedError() from exc
+
+        try:
+            assistant_db = await self._repo.add_utterance(
+                conversation_id,
+                speaker="assistant",
+                language=language,
+                text=assistant_text,
+                confidence=1.0,
+                attributes={},
+            )
+        except Exception as exc:
+            raise DatabaseOperationError() from exc
 
         assistant_payload = UtteranceInput(
             conversation_id=conversation_id,
@@ -131,9 +153,16 @@ class AssistantAgent:
         state.utterances.append(ConversationUtterance(payload=assistant_payload, db_id=assistant_db.id))
         state.history.append({"role": "assistant", "content": assistant_text})
 
-        tts_audio = await self._tts.synthesize(assistant_text, language=language)
+        try:
+            tts_audio = await self._tts.synthesize(assistant_text, language=language)
+        except Exception as exc:
+            raise TTSFailedError() from exc
 
-        structured_facts = await self._extract_structured_data(state)
+        try:
+            structured_facts = await self._extract_structured_data(state)
+        except Exception as exc:
+            LOGGER.exception("Structured extraction failed: %s", exc)
+            structured_facts = []
         actions = await self._maybe_trigger_actions(state)
 
         return {
@@ -147,10 +176,33 @@ class AssistantAgent:
             "actions": [action.model_dump() for action in actions],
         }
 
-    async def _ensure_state(self, conversation_id: str) -> ConversationState:
-        if conversation_id not in self._states:
-            await self.start_conversation(conversation_id)
-        return self._states[conversation_id]
+    async def _load_state(self, conversation_id: str) -> ConversationState:
+        try:
+            recent = await self._repo.list_recent_utterances(conversation_id, limit=20)
+        except Exception as exc:
+            raise DatabaseOperationError() from exc
+
+        utterance_inputs: list[UtteranceInput] = []
+        utterance_entries: list[ConversationUtterance] = []
+        for row in recent:
+            speaker_norm = normalize_speaker(row.speaker)
+            payload = UtteranceInput(
+                conversation_id=conversation_id,
+                speaker=speaker_norm,
+                language=row.language,
+                text=row.text,
+                confidence=row.confidence,
+                attributes=row.attributes or {},
+            )
+            utterance_inputs.append(payload)
+            utterance_entries.append(ConversationUtterance(payload=payload, db_id=row.id))
+
+        return ConversationState(
+            conversation_id=conversation_id,
+            history=build_llm_history(SYSTEM_PROMPT, utterance_inputs),
+            utterances=utterance_entries,
+            preferred_language=preferred_language_from_utterances(utterance_inputs),
+        )
 
     async def _generate_response(self, state: ConversationState) -> str:
         response = await self._llm.chat(state.history, temperature=0.2)

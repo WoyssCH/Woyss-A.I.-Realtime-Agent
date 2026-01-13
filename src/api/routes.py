@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
+from agents.errors import AssistantError
 from api.schemas import AudioUploadResponse, StartConversationResponse, StructuredFactResponse
 from db.repository import ConversationRepository
 
@@ -60,6 +61,10 @@ async def upload_audio(
     audio_bytes = await audio_file.read()
     try:
         result = await agent.handle_audio(conversation_id, speaker, audio_bytes)
+    except AssistantError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         LOGGER.exception("Audio handling failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
