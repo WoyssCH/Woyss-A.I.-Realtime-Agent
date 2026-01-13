@@ -110,6 +110,8 @@ async def twilio_voice_webhook(
     agent=Depends(get_agent),
 ) -> Response:
     settings = get_settings()
+    if not settings.twilio_enable_gather_voice:
+        raise HTTPException(status_code=404, detail="Legacy voice webhook disabled")
     form = await request.form()
 
     call_sid = str(form.get("CallSid") or "").strip() or "unknown"

@@ -50,8 +50,11 @@ class FakeTwilioClient:
 
 def test_twilio_voice_webhook_returns_gather_when_no_speech(app, monkeypatch):
     import api.dependencies as deps
+    import config.settings as settings
 
     app.dependency_overrides[deps.get_agent] = lambda: FakeAgent()
+    monkeypatch.setenv("TWILIO_ENABLE_GATHER_VOICE", "true")
+    settings.get_settings.cache_clear()
 
     with TestClient(app) as client:
         resp = client.post("/api/twilio/voice", data={"CallSid": "CA111"})
@@ -63,8 +66,11 @@ def test_twilio_voice_webhook_returns_gather_when_no_speech(app, monkeypatch):
 
 def test_twilio_voice_webhook_says_response_when_speech_present(app, monkeypatch):
     import api.dependencies as deps
+    import config.settings as settings
 
     app.dependency_overrides[deps.get_agent] = lambda: FakeAgent()
+    monkeypatch.setenv("TWILIO_ENABLE_GATHER_VOICE", "true")
+    settings.get_settings.cache_clear()
 
     with TestClient(app) as client:
         resp = client.post(
@@ -75,6 +81,16 @@ def test_twilio_voice_webhook_says_response_when_speech_present(app, monkeypatch
     assert resp.status_code == 200
     assert "<Say" in resp.text
     assert "Alles klar" in resp.text
+
+
+def test_twilio_voice_webhook_returns_404_when_disabled(app, monkeypatch):
+    import config.settings as settings
+
+    monkeypatch.setenv("TWILIO_ENABLE_GATHER_VOICE", "false")
+    settings.get_settings.cache_clear()
+    with TestClient(app) as client:
+        resp = client.post("/api/twilio/voice", data={"CallSid": "CA111"})
+    assert resp.status_code == 404
 
 
 def test_twilio_recall_creates_call(app, monkeypatch):

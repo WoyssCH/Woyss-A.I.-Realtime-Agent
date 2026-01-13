@@ -77,6 +77,10 @@ class Settings(BaseSettings):
         description="Public base URL for Twilio webhooks (e.g. https://<ngrok>.ngrok-free.app).",
     )
     twilio_say_language: str = Field(default="de-CH")
+    twilio_enable_gather_voice: bool = Field(
+        default=False,
+        description="If true, enables the legacy Twilio <Gather>/<Say> voice webhook (/api/twilio/voice).",
+    )
     twilio_enable_media_streams: bool = Field(
         default=False,
         description="If true, exposes experimental Twilio Media Streams endpoints.",
